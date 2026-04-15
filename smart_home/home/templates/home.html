@@ -1,7 +1,76 @@
 <!DOCTYPE html>
 <html>
-    <body>
-        <h1>Smart Home</h1>
-        <p>Smart Home control homepage</p>
-    </body>
+<head>
+    <title>Smart Home</title>
+</head>
+<body>
+
+    <h1>Smart Home Control</h1>
+
+    <!-- LED Control -->
+    <h2>LED</h2>
+    <button onclick="controlLED('ON')">Turn ON</button>
+    <button onclick="controlLED('OFF')">Turn OFF</button>
+    <p id="led-status">LED status: -</p>
+
+    <!-- Fan Control -->
+    <h2>Fan</h2>
+    <button onclick="controlFan('ON')">Turn ON</button>
+    <button onclick="controlFan('OFF')">Turn OFF</button>
+    <p id="fan-status">Fan status: -</p>
+
+    <!-- Sensor Data -->
+    <h2>Sensor Data</h2>
+    <p id="light-data">Light: -</p>
+    <p id="temp-data">Temperature: -</p>
+
+<script>
+const LED_URL = "/control_led/";
+const FAN_URL = "/control_fan/";
+const LIGHT_URL = "/get_light_data/";
+const TEMP_URL = "/get_temp_data/";
+
+async function sendCommand(url, state, statusId, label) {
+    const res = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ state })
+    });
+
+    const data = await res.json();
+    document.getElementById(statusId).innerText = data.status || data.error;
+}
+
+function controlLED(state) {
+    sendCommand(LED_URL, state, "led-status", "LED");
+}
+
+function controlFan(state) {
+    sendCommand(FAN_URL, state, "fan-status", "Fan");
+}
+
+// Polling sensor data
+async function updateSensors() {
+    const lightRes = await fetch(LIGHT_URL);
+    const lightData = await lightRes.json();
+
+    const tempRes = await fetch(TEMP_URL);
+    const tempData = await tempRes.json();
+
+    document.getElementById("light-data").innerText =
+        "Light: " + lightData.state;
+
+    document.getElementById("temp-data").innerText =
+        "Temperature: " + tempData.temp;
+}
+
+// refresh every 2 seconds
+setInterval(updateSensors, 2000);
+updateSensors();
+
+</script>
+
+</body>
 </html>
