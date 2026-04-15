@@ -2,27 +2,73 @@
 <html>
 <head>
     <title>Smart Home</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .card {
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            width: 300px;
+        }
+
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        .sensor {
+            font-size: 18px;
+        }
+    </style>
 </head>
+
 <body>
 
-    <h1>Smart Home Control</h1>
+<h1>Smart Home Control</h1>
 
-    <!-- LED Control -->
+<!-- LED -->
+<div class="card">
     <h2>LED</h2>
-    <button onclick="controlLED('ON')">Turn ON</button>
-    <button onclick="controlLED('OFF')">Turn OFF</button>
-    <p id="led-status">LED status: -</p>
+    <button onclick="controlDevice(LED_URL, 'ON', 'led-status')">Turn ON</button>
+    <button onclick="controlDevice(LED_URL, 'OFF', 'led-status')">Turn OFF</button>
+    <div id="led-status" class="status">Status: -</div>
+</div>
 
-    <!-- Fan Control -->
+<!-- FAN -->
+<div class="card">
     <h2>Fan</h2>
-    <button onclick="controlFan('ON')">Turn ON</button>
-    <button onclick="controlFan('OFF')">Turn OFF</button>
-    <p id="fan-status">Fan status: -</p>
+    <button onclick="controlDevice(FAN_URL, 'ON', 'fan-status')">Turn ON</button>
+    <button onclick="controlDevice(FAN_URL, 'OFF', 'fan-status')">Turn OFF</button>
+    <div id="fan-status" class="status">Status: -</div>
+</div>
 
-    <!-- Sensor Data -->
+<!-- SENSORS -->
+<div class="card">
     <h2>Sensor Data</h2>
-    <p id="light-data">Light: -</p>
-    <p id="temp-data">Temperature: -</p>
+
+    <div class="sensor">
+        Light: <span id="light-data">-</span>
+    </div>
+
+    <div class="sensor">
+        Temperature: <span id="temp-data">-</span>
+    </div>
+</div>
 
 <script>
 const LED_URL = "/control_led/";
@@ -30,43 +76,50 @@ const FAN_URL = "/control_fan/";
 const LIGHT_URL = "/get_light_data/";
 const TEMP_URL = "/get_temp_data/";
 
-async function sendCommand(url, state, statusId, label) {
-    const res = await fetch(url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ state })
-    });
+/* ---------------- Device Control ---------------- */
 
-    const data = await res.json();
-    document.getElementById(statusId).innerText = data.status || data.error;
+async function controlDevice(url, state, statusId) {
+    try {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ state })
+        });
+
+        const data = await res.json();
+        document.getElementById(statusId).innerText =
+            data.status || data.error || "Unknown response";
+
+    } catch (err) {
+        document.getElementById(statusId).innerText = "Request failed";
+    }
 }
 
-function controlLED(state) {
-    sendCommand(LED_URL, state, "led-status", "LED");
-}
+/* ---------------- Sensor Polling ---------------- */
 
-function controlFan(state) {
-    sendCommand(FAN_URL, state, "fan-status", "Fan");
-}
-
-// Polling sensor data
 async function updateSensors() {
-    const lightRes = await fetch(LIGHT_URL);
-    const lightData = await lightRes.json();
+    try {
+        const lightRes = await fetch(LIGHT_URL);
+        const lightData = await lightRes.json();
 
-    const tempRes = await fetch(TEMP_URL);
-    const tempData = await tempRes.json();
+        const tempRes = await fetch(TEMP_URL);
+        const tempData = await tempRes.json();
 
-    document.getElementById("light-data").innerText =
-        "Light: " + lightData.state;
+        document.getElementById("light-data").innerText =
+            lightData.value ?? "N/A";
 
-    document.getElementById("temp-data").innerText =
-        "Temperature: " + tempData.temp;
+        document.getElementById("temp-data").innerText =
+            tempData.temp ?? "N/A";
+
+    } catch (err) {
+        console.error("Sensor update failed", err);
+    }
 }
 
-// refresh every 2 seconds
+/* ---------------- Auto Refresh ---------------- */
+
 setInterval(updateSensors, 2000);
 updateSensors();
 

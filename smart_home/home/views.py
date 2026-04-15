@@ -2,6 +2,7 @@ import json
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse
 from django.template import loader
+from django.views.decorators.csrf import csrf_exempt
 
 from . import mqtt_client
 from .mqtt_client import LIGHT_DATA, TEMP_DATA
@@ -33,8 +34,10 @@ def control_device(request, topic, name):
         return JsonResponse({'status': f'{name} turned OFF'})
     return JsonResponse({'error': 'Invalid state'}, status=400)
 
+@csrf_exempt
 def control_led(request):
     return control_device(request, TOPIC_LED, "LED")
 
+@csrf_exempt
 def control_fan(request):
     return control_device(request, TOPIC_FAN, "Fan")
