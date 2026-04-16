@@ -33,6 +33,7 @@
 
         .sensor {
             font-size: 18px;
+            margin-bottom: 5px;
         }
     </style>
 </head>
@@ -43,7 +44,7 @@
 
 <!-- LED -->
 <div class="card">
-    <h2>LED</h2>
+    <h2>💡 LED</h2>
     <button onclick="controlDevice(LED_URL, 'ON', 'led-status')">Turn ON</button>
     <button onclick="controlDevice(LED_URL, 'OFF', 'led-status')">Turn OFF</button>
     <div id="led-status" class="status">Status: -</div>
@@ -51,7 +52,7 @@
 
 <!-- FAN -->
 <div class="card">
-    <h2>Fan</h2>
+    <h2>🌀 Fan</h2>
     <button onclick="controlDevice(FAN_URL, 'ON', 'fan-status')">Turn ON</button>
     <button onclick="controlDevice(FAN_URL, 'OFF', 'fan-status')">Turn OFF</button>
     <div id="fan-status" class="status">Status: -</div>
@@ -59,14 +60,26 @@
 
 <!-- SENSORS -->
 <div class="card">
-    <h2>Sensor Data</h2>
+    <h2>📊 Sensor Data</h2>
 
     <div class="sensor">
-        Light: <span id="light-data">-</span>
+        🌡️ Temperature: <span id="temp-data">-</span> °C
     </div>
 
     <div class="sensor">
-        Temperature: <span id="temp-data">-</span>
+        💧 Humidity: <span id="humi-data">-</span> %
+    </div>
+
+    <div class="sensor">
+        ☀️ Light: <span id="light-data">-</span>
+    </div>
+</div>
+
+<!-- IR -->
+<div class="card">
+    <h2>📡 IR Sensor</h2>
+    <div class="sensor">
+        Last IR Code: <span id="ir-data">-</span>
     </div>
 </div>
 
@@ -75,6 +88,8 @@ const LED_URL = "/control_led/";
 const FAN_URL = "/control_fan/";
 const LIGHT_URL = "/get_light_data/";
 const TEMP_URL = "/get_temp_data/";
+const HUMI_URL = "/get_humi_data/";
+const IR_URL = "/get_ir_data/";
 
 /* ---------------- Device Control ---------------- */
 
@@ -107,11 +122,23 @@ async function updateSensors() {
         const tempRes = await fetch(TEMP_URL);
         const tempData = await tempRes.json();
 
+        const humiRes = await fetch(HUMI_URL);
+        const humiData = await humiRes.json();
+
+        const irRes = await fetch(IR_URL);
+        const irData = await irRes.json();
+
         document.getElementById("light-data").innerText =
             lightData.value ?? "N/A";
 
         document.getElementById("temp-data").innerText =
             tempData.temp ?? "N/A";
+
+        document.getElementById("humi-data").innerText =
+            humiData.humi ?? "N/A";
+
+        document.getElementById("ir-data").innerText =
+            irData.code ?? "N/A";
 
     } catch (err) {
         console.error("Sensor update failed", err);

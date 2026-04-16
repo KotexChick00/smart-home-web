@@ -5,7 +5,7 @@ from django.template import loader
 from django.views.decorators.csrf import csrf_exempt
 
 from . import mqtt_client
-from .mqtt_client import LIGHT_DATA, TEMP_DATA
+from .mqtt_client import LIGHT_DATA, TEMP_DATA, HUMI_DATA, IR_DATA
 from .mqtt_client import TOPIC_LED, TOPIC_FAN
 
 def home(request):
@@ -21,6 +21,16 @@ def get_temp_data(request):
     if request.method != 'GET':
         return JsonResponse({'error': 'Invalid request method'}, status=405)
     return JsonResponse(TEMP_DATA)
+
+def get_humi_data(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+    return JsonResponse(HUMI_DATA)
+
+def get_ir_data(request):
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+    return JsonResponse(IR_DATA)
 
 def control_device(request, topic, name):
     if request.method != 'POST':
