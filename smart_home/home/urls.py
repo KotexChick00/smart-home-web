@@ -9,4 +9,5 @@ urlpatterns = [
     path('get_ir_data/', views.get_ir_data),
     path('control_led/', views.control_led),
     path('control_fan/', views.control_fan),
+    path('video_feed/', views.video_feed),
 ]

@@ -1,6 +1,6 @@
 import json
 from django.shortcuts import render
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.template import loader
 from django.views.decorators.csrf import csrf_exempt
 
@@ -51,3 +51,7 @@ def control_led(request):
 @csrf_exempt
 def control_fan(request):
     return control_device(request, TOPIC_FAN, "Fan")
+
+def video_feed(request):
+    from . import camera
+    return StreamingHttpResponse(camera.gen_frames(), content_type='multipart/x-mixed-replace; boundary=frame')
