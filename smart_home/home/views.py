@@ -19,6 +19,10 @@ def home(request):
         return redirect('login')
     return render(request, 'home.html')
 
+def logout_view(request):
+    request.session.flush()
+    return redirect('login')
+
 def register_view(request):
     return render(request, 'register.html')
 
@@ -150,4 +154,5 @@ def control_fan(request):
 
 def video_feed(request):
     from . import camera
-    return StreamingHttpResponse(camera.gen_frames(), content_type='multipart/x-mixed-replace; boundary=frame')
+    mode = request.GET.get('mode', 'recognition')
+    return StreamingHttpResponse(camera.gen_frames(mode), content_type='multipart/x-mixed-replace; boundary=frame')

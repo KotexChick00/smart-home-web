@@ -1,0 +1,1 @@
+python smart_home/manage.py runserver

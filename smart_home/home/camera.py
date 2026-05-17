@@ -20,17 +20,13 @@ from inference import FaceRecognizer, FaceDatabase
 detector = RetinaFace()
 MODEL_DIR = os.path.join(settings.BASE_DIR.parent, 'module', 'face_recognition', 'model')
 
-# Cập nhật đường dẫn cho ResNet-18 (MS1MV3)
-FINETUNED_PATH = os.path.join(MODEL_DIR, 'finetuned', 'backbone_ir_se18_epoch_3.pth')
-DEFAULT_PATH = os.path.join(MODEL_DIR, 'MS1MV3_arcface_r18_p16.pth')
-WEIGHTS_PATH = FINETUNED_PATH if os.path.exists(FINETUNED_PATH) else DEFAULT_PATH
+# Sử dụng trực tiếp model pretrained
+WEIGHTS_PATH = os.path.join(MODEL_DIR, '20180408-102900-casia-webface.pt')
 
 print(f"[Camera Debug] MODEL_DIR: {MODEL_DIR}")
-print(f"[Camera Debug] FINETUNED_PATH: {FINETUNED_PATH} (Exists: {os.path.exists(FINETUNED_PATH)})")
-print(f"[Camera Debug] DEFAULT_PATH: {DEFAULT_PATH} (Exists: {os.path.exists(DEFAULT_PATH)})")
-print(f"[Camera Debug] CHOSEN WEIGHTS: {WEIGHTS_PATH}")
+print(f"[Camera Debug] WEIGHTS_PATH: {WEIGHTS_PATH} (Exists: {os.path.exists(WEIGHTS_PATH)})")
 
-recognizer = FaceRecognizer(weight_path=WEIGHTS_PATH, backbone_type='ir_se18')
+recognizer = FaceRecognizer(weight_path=WEIGHTS_PATH, backbone_type='facenet')
 db = FaceDatabase(
     index_path=os.path.join(MODEL_DIR, 'faces.index'),
     users_path=os.path.join(MODEL_DIR, 'users.pkl')
@@ -43,6 +39,7 @@ class CameraStreamer:
         self.cap = None
         self.frame = None
         self.processed_frame = None
+        self.detect_only_frame = None
         self.running = False
         self.lock = threading.Lock()
         
@@ -102,7 +99,12 @@ class CameraStreamer:
             
             # Vẽ UI nhận diện lên một bản copy khác để stream
             display_frame = frame.copy()
+            detect_only_display = frame.copy()
             if faces:
+                # Chỉ lấy 1 khuôn mặt lớn nhất (chiếm diện tích lớn nhất) để xử lý
+                faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
+                faces = [faces[0]]
+                
                 current_time = time.time()
                 h, w = frame.shape[:2]
                 
@@ -115,6 +117,10 @@ class CameraStreamer:
                     x2, y2 = min(w, x2), min(h, y2)
                     
                     if x2 > x1 and y2 > y1:
+                        # Draw detection only bbox (Blue) for register page
+                        cv2.rectangle(detect_only_display, (x1, y1), (x2, y2), (255, 0, 0), 2)
+                        cv2.putText(detect_only_display, "Face Detected", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+
                         face_crop = frame[y1:y2, x1:x2]
                         landmarks = getattr(face, 'landmarks', None)
                         
@@ -143,10 +149,11 @@ class CameraStreamer:
                     self.recognized_user = best_user
 
             # Lưu frame đã vẽ UI để stream
-            ret, buffer = cv2.imencode('.jpg', display_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-            if ret:
-                with self.lock:
-                    self.processed_frame = buffer.tobytes()
+            ret1, buffer1 = cv2.imencode('.jpg', display_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+            ret2, buffer2 = cv2.imencode('.jpg', detect_only_display, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+            with self.lock:
+                if ret1: self.processed_frame = buffer1.tobytes()
+                if ret2: self.detect_only_frame = buffer2.tobytes()
             
             # Khống chế FPS của background thread
             time.sleep(0.01)
@@ -154,10 +161,13 @@ class CameraStreamer:
 # Singleton Instance
 streamer = CameraStreamer()
 
-def gen_frames():
+def gen_frames(mode='recognition'):
     while True:
         with streamer.lock:
-            frame_bytes = streamer.processed_frame
+            if mode == 'register':
+                frame_bytes = streamer.detect_only_frame
+            else:
+                frame_bytes = streamer.processed_frame
         
         if frame_bytes:
             yield (b'--frame\r\n'
@@ -178,7 +188,10 @@ def register_new_user(name):
     if not faces:
         return False, "Không tìm thấy khuôn mặt trong khung hình."
     
+    # Ưu tiên lấy khuôn mặt lớn nhất để đăng ký
+    faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
     face = faces[0]
+    
     landmarks = getattr(face, 'landmarks', None)
     x1, y1, x2, y2 = map(int, face.bbox)
     h, w = frame.shape[:2]
