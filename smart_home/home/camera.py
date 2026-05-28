@@ -1,41 +1,32 @@
 import cv2
 import time
 import os
-import sys
 import threading
-from django.conf import settings
-from uniface import RetinaFace
+import numpy as np
+import pickle
 
-# Sửa lỗi OMP: Error #15 trên macOS khi dùng nhiều thư viện AI
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+# --- KHỞI TẠO HỆ THỐNG LƯU TRỮ CỤC BỘ ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'face_data')
+MODEL_PATH = os.path.join(BASE_DIR, 'lbph_model.yml')
+LABEL_PATH = os.path.join(BASE_DIR, 'labels.pkl')
 
-# Thêm đường dẫn module face_recognition vào sys.path để import inference
-FR_SRC_PATH = os.path.join(settings.BASE_DIR.parent, 'module', 'face_recognition', 'src')
-if FR_SRC_PATH not in sys.path:
-    sys.path.append(FR_SRC_PATH)
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
-from inference import FaceRecognizer, FaceDatabase
+# Dùng Haar Cascade có sẵn của OpenCV (nhẹ, nhanh, không cần file ngoài)
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+recognizer = cv2.face.LBPHFaceRecognizer_create()
 
-# --- KHỞI TẠO SINGLETON AI ---
-detector = RetinaFace()
-MODEL_DIR = os.path.join(settings.BASE_DIR.parent, 'module', 'face_recognition', 'model')
-
-# Sử dụng trực tiếp model pretrained
-WEIGHTS_PATH = os.path.join(MODEL_DIR, '20180408-102900-casia-webface.pt')
-
-print(f"[Camera Debug] MODEL_DIR: {MODEL_DIR}")
-print(f"[Camera Debug] WEIGHTS_PATH: {WEIGHTS_PATH} (Exists: {os.path.exists(WEIGHTS_PATH)})")
-
-recognizer = FaceRecognizer(weight_path=WEIGHTS_PATH, backbone_type='facenet')
-db = FaceDatabase(
-    index_path=os.path.join(MODEL_DIR, 'faces.index'),
-    users_path=os.path.join(MODEL_DIR, 'users.pkl')
-)
+# Nạp dữ liệu tên nếu đã từng đăng ký trước đó
+label_dict = {}
+if os.path.exists(MODEL_PATH) and os.path.exists(LABEL_PATH):
+    recognizer.read(MODEL_PATH)
+    with open(LABEL_PATH, 'rb') as f:
+        label_dict = pickle.load(f)
 
 class CameraStreamer:
-    """Hệ thống quản lý Camera tập trung để tránh xung đột tài nguyên"""
     def __init__(self):
-        self.camera_index = 0
         self.cap = None
         self.frame = None
         self.processed_frame = None
@@ -43,15 +34,9 @@ class CameraStreamer:
         self.running = False
         self.lock = threading.Lock()
         
-        # Gắn kết AI module vào streamer
-        self.db = db
-        self.recognizer = recognizer
-        
-        # Biến cho Recognition
         self.last_face_detected_time = 0
         self.recognized_user = None
         
-        # Khởi động thread
         self.start()
 
     def start(self):
@@ -60,151 +45,113 @@ class CameraStreamer:
             self.thread = threading.Thread(target=self._update, daemon=True)
             self.thread.start()
 
-    def set_camera_index(self, index):
-        with self.lock:
-            if self.camera_index != index:
-                print(f"[Camera] Chuyển sang index: {index}")
-                self.camera_index = index
-                if self.cap:
-                    self.cap.release()
-                    self.cap = None
-
     def _update(self):
-        print("[Camera] Background thread started.")
-        frame_count = 0
-        process_every_n_frames = 3
-        faces = []
+        print("[Camera] Hệ thống Nhận diện Khuôn mặt (LBPH) đã khởi động.")
+        self.cap = cv2.VideoCapture(0)
         
         while self.running:
-            if self.cap is None or not self.cap.isOpened():
-                self.cap = cv2.VideoCapture(self.camera_index)
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                time.sleep(1) # Chờ camera khởi động
-                continue
-
             success, frame = self.cap.read()
             if not success:
                 time.sleep(0.1)
                 continue
 
-            # Lưu frame gốc để đăng ký
             with self.lock:
                 self.frame = frame.copy()
             
-            # AI Processing (Detect)
-            frame_count += 1
-            if frame_count % process_every_n_frames == 0:
-                faces = detector.detect(frame)
+            # Chuyển sang ảnh xám để tăng tốc độ xử lý
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
             
-            # Vẽ UI nhận diện lên một bản copy khác để stream
             display_frame = frame.copy()
-            detect_only_display = frame.copy()
-            if faces:
-                # Chỉ lấy 1 khuôn mặt lớn nhất (chiếm diện tích lớn nhất) để xử lý
-                faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
-                faces = [faces[0]]
+            detect_only = frame.copy()
+            
+            best_user = None
+            
+            for (x, y, w, h) in faces:
+                # 1. Giao diện trang Đăng ký (Khung xanh dương)
+                cv2.rectangle(detect_only, (x, y), (x+w, y+h), (255, 0, 0), 2)
                 
-                current_time = time.time()
-                h, w = frame.shape[:2]
+                roi_gray = gray[y:y+h, x:x+w]
+                label = "Unknown"
+                color = (0, 0, 255)
                 
-                best_similarity = -1
-                best_user = None
+                # 2. Giao diện trang Đăng nhập (Nhận diện)
+                if len(label_dict) > 0:
+                    id_, conf = recognizer.predict(roi_gray)
+                    # LBPH: Khoảng cách (Confidence) càng nhỏ càng giống. Ngưỡng tốt thường < 75.
+                    if conf < 75:
+                        label = f"{label_dict.get(id_, 'Unknown')} ({int(conf)})"
+                        color = (0, 255, 0) # Xanh lá nếu nhận ra
+                        best_user = label_dict.get(id_)
                 
-                for face in faces:
-                    x1, y1, x2, y2 = map(int, face.bbox)
-                    x1, y1 = max(0, x1), max(0, y1)
-                    x2, y2 = min(w, x2), min(h, y2)
-                    
-                    if x2 > x1 and y2 > y1:
-                        # Draw detection only bbox (Blue) for register page
-                        cv2.rectangle(detect_only_display, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                        cv2.putText(detect_only_display, "Face Detected", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+                cv2.rectangle(display_frame, (x, y), (x+w, y+h), color, 2)
+                cv2.putText(display_frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            
+            # Cập nhật trạng thái để trang Web biết có mở nút Đăng nhập hay không
+            if best_user:
+                self.last_face_detected_time = time.time()
+                self.recognized_user = best_user
 
-                        face_crop = frame[y1:y2, x1:x2]
-                        landmarks = getattr(face, 'landmarks', None)
-                        
-                        # AI Recognition
-                        embedding = self.recognizer.get_embedding(face_crop, landmarks)
-                        user_name, similarity = self.db.search(embedding, threshold=0.8)
-                        
-                        if user_name:
-                            color = (0, 255, 0)
-                            label = f"{user_name} ({similarity:.2f})"
-                            
-                            # Lưu người có độ tương đồng cao nhất để phục vụ Login
-                            if similarity > best_similarity:
-                                best_similarity = similarity
-                                best_user = user_name
-                        else:
-                            color = (0, 0, 255)
-                            label = "Unknown"
-
-                        cv2.rectangle(display_frame, (x1, y1), (x2, y2), color, 2)
-                        cv2.putText(display_frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-                
-                # Cập nhật trạng thái người dùng nhận diện được (để hiện nút Login)
-                if best_user:
-                    self.last_face_detected_time = current_time
-                    self.recognized_user = best_user
-
-            # Lưu frame đã vẽ UI để stream
-            ret1, buffer1 = cv2.imencode('.jpg', display_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-            ret2, buffer2 = cv2.imencode('.jpg', detect_only_display, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+            ret1, buffer1 = cv2.imencode('.jpg', display_frame)
+            ret2, buffer2 = cv2.imencode('.jpg', detect_only)
+            
             with self.lock:
                 if ret1: self.processed_frame = buffer1.tobytes()
                 if ret2: self.detect_only_frame = buffer2.tobytes()
             
-            # Khống chế FPS của background thread
-            time.sleep(0.01)
+            time.sleep(0.04)
 
-# Singleton Instance
 streamer = CameraStreamer()
 
 def gen_frames(mode='recognition'):
     while True:
         with streamer.lock:
-            if mode == 'register':
-                frame_bytes = streamer.detect_only_frame
-            else:
-                frame_bytes = streamer.processed_frame
+            frame_bytes = streamer.detect_only_frame if mode == 'register' else streamer.processed_frame
         
         if frame_bytes:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        time.sleep(0.04) # ~25 FPS cho stream
+        time.sleep(0.04)
 
 def get_recognition_status():
     return streamer.last_face_detected_time, streamer.recognized_user
 
 def register_new_user(name):
+    """Hàm chụp ảnh và huấn luyện AI tại chỗ"""
     with streamer.lock:
         frame = streamer.frame.copy() if streamer.frame is not None else None
     
     if frame is None:
-        return False, "Không có dữ liệu hình ảnh. Vui lòng chờ camera khởi động."
+        return False, "Chưa bật Camera."
+        
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
     
-    faces = detector.detect(frame)
-    if not faces:
-        return False, "Không tìm thấy khuôn mặt trong khung hình."
+    if len(faces) == 0:
+        return False, "Không tìm thấy khuôn mặt! Hãy nhìn thẳng vào Camera."
+        
+    # Lấy khuôn mặt to và gần Camera nhất để làm mẫu đăng ký
+    faces = sorted(faces, key=lambda f: f[2]*f[3], reverse=True)
+    x, y, w, h = faces[0]
+    roi_gray = gray[y:y+h, x:x+w]
     
-    # Ưu tiên lấy khuôn mặt lớn nhất để đăng ký
-    faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
-    face = faces[0]
+    # Tạo ID duy nhất cho người dùng mới
+    new_id = 0 if len(label_dict) == 0 else max(label_dict.keys()) + 1
+    label_dict[new_id] = name
     
-    landmarks = getattr(face, 'landmarks', None)
-    x1, y1, x2, y2 = map(int, face.bbox)
-    h, w = frame.shape[:2]
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(w, x2), min(h, y2)
-    face_img = frame[y1:y2, x1:x2]
+    # Tạo biến thể dữ liệu (Data Augmentation) để AI học chuẩn hơn từ 1 bức ảnh
+    faces_data = [roi_gray, cv2.flip(roi_gray, 1)] 
+    ids = np.array([new_id, new_id])
     
-    try:
-        embedding = streamer.recognizer.get_embedding(face_img, landmarks)
-        streamer.db.add_user(name, embedding)
-        return True, f"Đã đăng ký thành công: {name}"
-    except Exception as e:
-        return False, f"Lỗi: {str(e)}"
-
-def set_camera_index(index):
-    streamer.set_camera_index(int(index))
+    # Huấn luyện mô hình ngay lập tức
+    if os.path.exists(MODEL_PATH):
+        recognizer.update(faces_data, ids)
+    else:
+        recognizer.train(faces_data, ids)
+        
+    # Lưu trí nhớ xuống ổ cứng
+    recognizer.write(MODEL_PATH)
+    with open(LABEL_PATH, 'wb') as f:
+        pickle.dump(label_dict, f)
+        
+    return True, f"Đã đăng ký thành công ID Face: {name}"

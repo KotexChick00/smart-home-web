@@ -156,3 +156,10 @@ def video_feed(request):
     from . import camera
     mode = request.GET.get('mode', 'recognition')
     return StreamingHttpResponse(camera.gen_frames(mode), content_type='multipart/x-mixed-replace; boundary=frame')
+
+from django.http import JsonResponse
+from . import mqtt_client 
+
+def get_device_status(request):
+    """API trả về trạng thái hiện tại của Đèn và Quạt cho giao diện Web"""
+    return JsonResponse(mqtt_client.DEVICE_STATE)
