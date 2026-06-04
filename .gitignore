@@ -1,2 +1,29 @@
+# Environments
 .venv
+env/
+venv/
+
+# Byte-compiled / optimized
 __pycache__/
+*.py[cod]
+*$py.class
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# Face Recognition specifics
+faces_webface_112x112*
+*.zip
+
+# Database & Weights
+*.index
+*.pkl
+# *.pt # Bỏ comment dòng này nếu không muốn đẩy model lên Github (tránh giới hạn 100MB)

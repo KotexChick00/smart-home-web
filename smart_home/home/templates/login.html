@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Home - Authentication</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .split {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+        }
+
+        .left-panel {
+            background-color: #1e1e1e;
+            border-right: 2px solid #333;
+        }
+
+        .right-panel {
+            background-color: #121212;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+            font-weight: 400;
+            letter-spacing: 1px;
+            color: #e0e0e0;
+        }
+
+        .camera-container {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            border: 1px solid #444;
+            background: #000;
+            position: relative;
+        }
+
+        .camera-container img {
+            width: 100%;
+            display: block;
+        }
+
+        .status-badge {
+            margin-top: 20px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background-color: #333;
+            color: #aaa;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pulse {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ff9800;
+            box-shadow: 0 0 8px #ff9800;
+            animation: pulse-animation 1.5s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(255, 152, 0, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+        }
+
+        .login-card {
+            background-color: #1e1e1e;
+            padding: 40px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 350px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            border: 1px solid #333;
+            text-align: center;
+        }
+
+        input[type="password"] {
+            width: 100%;
+            padding: 14px;
+            margin: 15px 0;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background-color: #2a2a2a;
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input[type="password"]:focus {
+            border-color: #03a9f4;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #03a9f4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #0288d1;
+        }
+
+        .error-message {
+            color: #f44336;
+            margin-top: 15px;
+            font-size: 14px;
+            min-height: 20px;
+        }
+
+        .or-divider {
+            margin: 30px 0;
+            position: relative;
+            text-align: center;
+        }
+
+        .or-divider::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background-color: #444;
+        }
+
+        .or-divider::after {
+            content: "";
+            position: absolute;
+            right: 0;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background-color: #444;
+        }
+
+        .or-divider span {
+            background-color: #121212;
+            padding: 0 10px;
+            color: #888;
+            font-size: 14px;
+        }
+        .camera-controls {
+            margin-bottom: 15px;
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .camera-select {
+            padding: 8px 12px;
+            background-color: #2a2a2a;
+            color: #fff;
+            border: 1px solid #444;
+            border-radius: 6px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .camera-select:focus {
+            border-color: #03a9f4;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="split left-panel">
+        <h2>Face Authentication</h2>
+        <div class="camera-controls">
+            <select id="camera-select" class="camera-select">
+                <option value="0">Camera 0 (Default)</option>
+                <option value="1">Camera 1</option>
+                <option value="2">Camera 2</option>
+                <option value="3">Camera 3</option>
+            </select>
+        </div>
+        <div class="camera-container">
+            <img id="camera-feed" src="/video_feed/" alt="Camera Stream Loading...">
+        </div>
+        <div class="status-badge" id="face-status">
+            <div class="pulse"></div>
+            Đang chờ phát hiện khuôn mặt...
+        </div>
+        <div id="login-confirm-box" style="display: none; width: 100%; max-width: 500px; margin-top: 20px; animation: slideIn 0.5s ease-out;">
+            <button id="btn-confirm-login" style="background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%); font-weight: bold; border-radius: 12px; padding: 16px;">
+                🔓 Đăng nhập: <span id="detected-user"></span>
+            </button>
+        </div>
+    </div>
+    
+    <style>
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+
+    <div class="split right-panel">
+        <div class="login-card">
+            <h2>Password Login</h2>
+            <form id="login-form">
+                <input type="password" id="password" placeholder="Enter Password" required>
+                <button type="submit">Access Dashboard</button>
+                <div class="error-message" id="error-message"></div>
+            </form>
+
+            <div class="or-divider">
+                <span>OR</span>
+            </div>
+
+            <div id="register-section">
+                <h3 style="font-weight: 400; color: #aaa; margin-bottom: 15px;">New User?</h3>
+                <button onclick="window.location.href='/register/'" style="background-color: #4caf50;">Register New Face</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Handle camera selection
+        document.getElementById('camera-select').addEventListener('change', async (e) => {
+            const idx = e.target.value;
+            try {
+                await fetch('/set_camera/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ camera_index: idx })
+                });
+                // Ép trình duyệt tải lại luồng stream mới
+                document.getElementById('camera-feed').src = '/video_feed/?t=' + new Date().getTime();
+            } catch (err) {
+                console.error("Failed to switch camera", err);
+            }
+        });
+
+        // Check for face detection every 1.5 seconds
+        let detectedUser = null;
+        setInterval(async () => {
+            if (detectedUser) return; // Nếu đã hiện nút đăng nhập thì không check nữa
+
+            try {
+                const res = await fetch('/check_face/');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    detectedUser = data.user;
+                    document.getElementById('face-status').innerHTML = "✅ Đã nhận diện: " + detectedUser;
+                    document.getElementById('face-status').style.color = "#4caf50";
+                    document.getElementById('detected-user').innerText = detectedUser;
+                    document.getElementById('login-confirm-box').style.display = "block";
+                }
+            } catch (err) {
+                console.error("Error checking face:", err);
+            }
+        }, 1500);
+
+        // Handle manual login confirmation
+        document.getElementById('btn-confirm-login').addEventListener('click', async () => {
+            if (!detectedUser) return;
+            
+            try {
+                const res = await fetch('/confirm_login/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_name: detectedUser })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    window.location.href = '/dashboard/';
+                }
+            } catch (err) {
+                console.error("Confirm login failed", err);
+            }
+        });
+
+        // Handle password submission
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error-message');
+            errorDiv.innerText = "";
+
+            try {
+                const res = await fetch('/verify_password/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password })
+                });
+
+                const data = await res.json();
+                if (data.status === 'success') {
+                    window.location.href = '/dashboard/';
+                } else {
+                    errorDiv.innerText = data.message || "Đăng nhập thất bại.";
+                }
+            } catch (err) {
+                errorDiv.innerText = "Lỗi kết nối máy chủ.";
+            }
+        });
+    </script>
+</body>
+</html>

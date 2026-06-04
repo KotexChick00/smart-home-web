@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Home - Face Registration</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px;
+            width: 90%;
+            max-width: 900px;
+            display: flex;
+            gap: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .left-section {
+            flex: 1.5;
+        }
+
+        .right-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #00d2ff, #3a7bd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            color: #8892b0;
+            margin-bottom: 24px;
+            font-size: 15px;
+        }
+
+        .camera-wrapper {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: #000;
+            aspect-ratio: 4/3;
+        }
+
+        .camera-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .scan-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 2px solid rgba(0, 210, 255, 0.3);
+            box-sizing: border-box;
+            pointer-events: none;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(to right, transparent, #00d2ff, transparent);
+            top: 0;
+            animation: scan 3s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ccd6f6;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00d2ff;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.2);
+        }
+
+        .btn-capture {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 12px;
+        }
+
+        .btn-capture:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 210, 255, 0.3);
+        }
+
+        .btn-back {
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #8892b0;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-back:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+        }
+
+        .status-box {
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status-success { background: rgba(76, 175, 80, 0.1); color: #4caf50; border: 1px solid rgba(76, 175, 80, 0.2); display: block; }
+        .status-error { background: rgba(244, 67, 54, 0.1); color: #f44336; border: 1px solid rgba(244, 67, 54, 0.2); display: block; }
+
+        .progress-dots {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .dot.active {
+            background: #00d2ff;
+            box-shadow: 0 0 10px #00d2ff;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="left-section">
+        <div class="camera-wrapper">
+            <img id="camera-feed" src="/video_feed/?mode=register" alt="Camera Feed">
+            <div class="scan-overlay">
+                <div class="scan-line"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="right-section">
+        <h1>Face Registration</h1>
+        <p>Ghi danh khuôn mặt mới vào hệ thống bảo mật Smart Home.</p>
+        
+        <div class="input-group">
+            <label for="reg-name">Full Name</label>
+            <input type="text" id="reg-name" placeholder="Ví dụ: Nguyễn Văn A" autocomplete="off">
+        </div>
+
+        <button class="btn-capture" id="btn-register">Bắt đầu ghi danh</button>
+        <button class="btn-back" onclick="window.location.href='/'">Quay lại Đăng nhập</button>
+        
+        <div id="status-msg" class="status-box"></div>
+    </div>
+</div>
+
+<script>
+    const btnRegister = document.getElementById('btn-register');
+    const nameInput = document.getElementById('reg-name');
+    const statusMsg = document.getElementById('status-msg');
+
+    btnRegister.addEventListener('click', async () => {
+        const name = nameInput.value.trim();
+        
+        if (!name) {
+            showStatus("⚠️ Vui lòng nhập đầy đủ họ tên.", "error");
+            return;
+        }
+
+        btnRegister.disabled = true;
+        btnRegister.innerText = "Đang phân tích khuôn mặt...";
+        showStatus("🔍 Đang quét khuôn mặt, vui lòng giữ yên...", "success");
+
+        try {
+            const response = await fetch('/register_face/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            });
+            
+            const data = await response.json();
+            
+            if (data.status === 'success') {
+                showStatus("✅ Ghi danh thành công! Bạn có thể quay lại đăng nhập.", "success");
+                btnRegister.innerText = "Tiếp tục đăng ký mới";
+                nameInput.value = "";
+            } else {
+                showStatus("❌ Lỗi: " + data.message, "error");
+                btnRegister.innerText = "Thử lại";
+            }
+        } catch (error) {
+            showStatus("❌ Lỗi kết nối máy chủ.", "error");
+            btnRegister.innerText = "Thử lại";
+        } finally {
+            btnRegister.disabled = false;
+        }
+    });
+
+    function showStatus(text, type) {
+        statusMsg.innerText = text;
+        statusMsg.className = "status-box " + (type === "success" ? "status-success" : "status-error");
+        statusMsg.style.display = "block";
+    }
+</script>
+
+</body>
+</html>
