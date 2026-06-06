@@ -24,6 +24,8 @@ IR_DATA = {'ir': 0}
 DEVICE_STATE = {'led': '0', 'fan': '0'} 
 
 AI_MODE = True
+IS_LOGGED_IN = False
+LAST_ACTIVE_TIME = 0
 
 client = mqtt.Client()
 model_occupancy = None
@@ -39,7 +41,7 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(TOPIC_FAN)
 
 def on_message(client, userdata, msg):
-    global model_occupancy, model_comfort, AI_MODE
+    global model_occupancy, model_comfort, AI_MODE, IS_LOGGED_IN, LAST_ACTIVE_TIME
     topic = msg.topic
     payload = msg.payload.decode()
 
@@ -65,33 +67,42 @@ def on_message(client, userdata, msg):
     except ValueError:
         pass 
 
-    # 3. 🤖 THỰC THI TRÍ TUỆ NHÂN TẠO (chỉ chạy nếu AI_MODE được bật)
-    if AI_MODE:
-        # AI 1: Bật/Tắt ĐÈN dựa trên mô hình Occupancy Detection
-        if model_occupancy and topic in [TOPIC_TEMP, TOPIC_HUMI, TOPIC_LIGHT]:
-            input_occ = pd.DataFrame(
-                [[TEMP_DATA['temp'], HUMI_DATA['humi'], LIGHT_DATA['light'], 400, 0.001]],
-                columns=['Temperature', 'Humidity', 'Light', 'CO2', 'HumidityRatio']
-            )
-            ai_has_person = model_occupancy.predict(input_occ)[0]
-            
-            if ai_has_person == 1:
-                publish(TOPIC_LED, "1")
-            else:
-                publish(TOPIC_LED, "0")
+    import time
+    # Kiểm tra xem có người dùng đang đăng nhập và đang xem Dashboard không
+    is_active = IS_LOGGED_IN and (time.time() - LAST_ACTIVE_TIME < 6.0)
 
-        # AI 2: Bật/Tắt QUẠT dựa trên mô hình ASHRAE Thermal Comfort
-        if model_comfort and topic in [TOPIC_TEMP, TOPIC_HUMI]:
-            input_comf = pd.DataFrame(
-                [[TEMP_DATA['temp'], HUMI_DATA['humi']]],
-                columns=['Air temperature (C)', 'Relative humidity (%)']
-            )
-            predicted_pmv = model_comfort.predict(input_comf)[0]
-            
-            if predicted_pmv > 0.5:
-                publish(TOPIC_FAN, "1")
-            else:
-                publish(TOPIC_FAN, "0")
+    if not is_active:
+        # Nếu chưa đăng nhập hoặc đóng tab, tắt tất cả thiết bị
+        if DEVICE_STATE['led'] != '0':
+            publish(TOPIC_LED, '0')
+            DEVICE_STATE['led'] = '0'
+        if DEVICE_STATE['fan'] != '0':
+            publish(TOPIC_FAN, '0')
+            DEVICE_STATE['fan'] = '0'
+    else:
+        # 3. 🤖 THỰC THI TRÍ TUỆ NHÂN TẠO (chỉ chạy nếu AI_MODE được bật)
+        if AI_MODE:
+            # AI 1: Bật/Tắt ĐÈN dựa trên mô hình Occupancy Detection
+            if model_occupancy and topic in [TOPIC_TEMP, TOPIC_HUMI, TOPIC_LIGHT]:
+                ai_has_person = 1 # Force always occupied (chỉnh thành luôn có người)
+                
+                if ai_has_person == 1:
+                    publish(TOPIC_LED, "1")
+                else:
+                    publish(TOPIC_LED, "0")
+
+            # AI 2: Bật/Tắt QUẠT dựa trên mô hình ASHRAE Thermal Comfort
+            if model_comfort and topic in [TOPIC_TEMP, TOPIC_HUMI]:
+                input_comf = pd.DataFrame(
+                    [[TEMP_DATA['temp'], HUMI_DATA['humi']]],
+                    columns=['Air temperature (C)', 'Relative humidity (%)']
+                )
+                predicted_pmv = model_comfort.predict(input_comf)[0]
+                
+                if predicted_pmv > 0.5:
+                    publish(TOPIC_FAN, "1")
+                else:
+                    publish(TOPIC_FAN, "0")
 
 client.on_connect = on_connect
 client.on_message = on_message

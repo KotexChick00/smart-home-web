@@ -90,13 +90,6 @@
     </div>
 </div>
 
-<!-- IR -->
-<div class="card">
-    <h2>📡 IR Sensor</h2>
-    <div class="sensor">
-        Last IR Code: <span id="ir-data">-</span>
-    </div>
-</div>
 
 <!-- CAMERA FEED -->
 <div class="card" style="width: 400px; border: 1.5px solid #eaeaea;">
@@ -120,7 +113,6 @@ const FAN_URL = "/control_fan/";
 const LIGHT_URL = "/get_light_data/";
 const TEMP_URL = "/get_temp_data/";
 const HUMI_URL = "/get_humi_data/";
-const IR_URL = "/get_ir_data/";
 const TOGGLE_AI_URL = "/toggle_ai/";
 
 /* ---------------- Device Control ---------------- */
@@ -157,8 +149,6 @@ async function updateSensors() {
         const humiRes = await fetch(HUMI_URL);
         const humiData = await humiRes.json();
 
-        const irRes = await fetch(IR_URL);
-        const irData = await irRes.json();
 
         const statusRes = await fetch("/get_device_status/");
         const statusData = await statusRes.json();
@@ -172,8 +162,6 @@ async function updateSensors() {
         document.getElementById("humi-data").innerText =
             humiData.humi ?? "N/A";
 
-        document.getElementById("ir-data").innerText =
-            irData.ir ?? "N/A";
 
         document.getElementById("led-status").innerText =
             statusData.led === "1" ? "Status: ON" : "Status: OFF";
