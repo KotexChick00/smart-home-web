@@ -45,6 +45,17 @@ class CameraStreamer:
             self.thread = threading.Thread(target=self._update, daemon=True)
             self.thread.start()
 
+    def stop(self):
+        if self.running:
+            self.running = False
+            # Chờ luồng thread kết thúc để giải phóng Cap một cách an toàn
+            if hasattr(self, 'thread'):
+                self.thread.join(timeout=1)
+            with self.lock:
+                self.frame = None
+                self.processed_frame = None
+                self.detect_only_frame = None
+
     def _update(self):
         print("[Camera] Hệ thống Nhận diện Khuôn mặt (LBPH) đã khởi động.")
         self.cap = cv2.VideoCapture(0)
@@ -100,6 +111,12 @@ class CameraStreamer:
                 if ret2: self.detect_only_frame = buffer2.tobytes()
             
             time.sleep(0.04)
+
+        # Giải phóng phần cứng webcam khi vòng lặp dừng
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+        print("[Camera] Đã tạm dừng Camera và giải phóng phần cứng thành công.")
 
 streamer = CameraStreamer()
 

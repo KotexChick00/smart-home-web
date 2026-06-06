@@ -21,4 +21,6 @@ urlpatterns = [
     path('control_fan/', views.control_fan),
     path('video_feed/', views.video_feed),
     path('get_device_status/', views.get_device_status, name='get_device_status'),
+    path('toggle_ai/', views.toggle_ai, name='toggle_ai'),
+    path('toggle_camera/', views.toggle_camera, name='toggle_camera'),
 ]

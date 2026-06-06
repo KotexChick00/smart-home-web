@@ -159,7 +159,46 @@ def video_feed(request):
 
 from django.http import JsonResponse
 from . import mqtt_client 
+from django.views.decorators.csrf import csrf_exempt
+import json
 
 def get_device_status(request):
-    """API trả về trạng thái hiện tại của Đèn và Quạt cho giao diện Web"""
-    return JsonResponse(mqtt_client.DEVICE_STATE)
+    """API trả về trạng thái hiện tại của Đèn, Quạt và Chế độ AI cho giao diện Web"""
+    from . import camera
+    return JsonResponse({
+        'led': mqtt_client.DEVICE_STATE.get('led', '0'),
+        'fan': mqtt_client.DEVICE_STATE.get('fan', '0'),
+        'ai_mode': mqtt_client.AI_MODE,
+        'camera_running': camera.streamer.running
+    })
+
+@csrf_exempt
+def toggle_ai(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body or '{}')
+            state = data.get('state') # "ON" or "OFF"
+            if state == "ON":
+                mqtt_client.AI_MODE = True
+            elif state == "OFF":
+                mqtt_client.AI_MODE = False
+            return JsonResponse({'status': 'success', 'ai_mode': mqtt_client.AI_MODE})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+@csrf_exempt
+def toggle_camera(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body or '{}')
+            state = data.get('state') # "ON" or "OFF"
+            from . import camera
+            if state == "ON":
+                camera.streamer.start()
+            elif state == "OFF":
+                camera.streamer.stop()
+            return JsonResponse({'status': 'success', 'camera_running': camera.streamer.running})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
