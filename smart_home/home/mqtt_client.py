@@ -1,17 +1,18 @@
 import paho.mqtt.client as mqtt
 import joblib
 import numpy as np
+import pandas as pd
 import os
 
 BROKER = 'broker.hivemq.com'
 PORT = 1883
 
-TOPIC_LIGHT = "bk-iot-light"
-TOPIC_TEMP = "bk-iot-temp"
-TOPIC_HUMI = "bk-iot-humi"
-TOPIC_LED = "bk-iot-led"
-TOPIC_FAN = "bk-iot-fan"
-TOPIC_IR = "bk-iot-ir"
+TOPIC_LIGHT = "tnaker-bk-iot-light"
+TOPIC_TEMP = "tnaker-bk-iot-temp"
+TOPIC_HUMI = "tnaker-bk-iot-humi"
+TOPIC_LED = "tnaker-bk-iot-led"
+TOPIC_FAN = "tnaker-bk-iot-fan"
+TOPIC_IR = "tnaker-bk-iot-ir"
 
 # Các biến toàn cục lưu trữ dữ liệu cho Web
 LIGHT_DATA = {'light': 0}
@@ -21,6 +22,8 @@ IR_DATA = {'ir': 0}
 
 # Lưu trạng thái hiện tại của thiết bị để đồng bộ với nút bấm trên Web
 DEVICE_STATE = {'led': '0', 'fan': '0'} 
+
+AI_MODE = True
 
 client = mqtt.Client()
 model_occupancy = None
@@ -36,7 +39,7 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(TOPIC_FAN)
 
 def on_message(client, userdata, msg):
-    global model_occupancy, model_comfort
+    global model_occupancy, model_comfort, AI_MODE
     topic = msg.topic
     payload = msg.payload.decode()
 
@@ -62,26 +65,33 @@ def on_message(client, userdata, msg):
     except ValueError:
         pass 
 
-    # 3. 🤖 THỰC THI TRÍ TUỆ NHÂN TẠO 
-    # AI 1: Bật/Tắt ĐÈN dựa trên mô hình Occupancy Detection
-    if model_occupancy and topic in [TOPIC_TEMP, TOPIC_HUMI, TOPIC_LIGHT]:
-        input_occ = np.array([[TEMP_DATA['temp'], HUMI_DATA['humi'], LIGHT_DATA['light'], 400, 0.001]])
-        ai_has_person = model_occupancy.predict(input_occ)[0]
-        
-        if ai_has_person == 1:
-            publish(TOPIC_LED, "1")
-        else:
-            publish(TOPIC_LED, "0")
+    # 3. 🤖 THỰC THI TRÍ TUỆ NHÂN TẠO (chỉ chạy nếu AI_MODE được bật)
+    if AI_MODE:
+        # AI 1: Bật/Tắt ĐÈN dựa trên mô hình Occupancy Detection
+        if model_occupancy and topic in [TOPIC_TEMP, TOPIC_HUMI, TOPIC_LIGHT]:
+            input_occ = pd.DataFrame(
+                [[TEMP_DATA['temp'], HUMI_DATA['humi'], LIGHT_DATA['light'], 400, 0.001]],
+                columns=['Temperature', 'Humidity', 'Light', 'CO2', 'HumidityRatio']
+            )
+            ai_has_person = model_occupancy.predict(input_occ)[0]
+            
+            if ai_has_person == 1:
+                publish(TOPIC_LED, "1")
+            else:
+                publish(TOPIC_LED, "0")
 
-    # AI 2: Bật/Tắt QUẠT dựa trên mô hình ASHRAE Thermal Comfort
-    if model_comfort and topic in [TOPIC_TEMP, TOPIC_HUMI]:
-        input_comf = np.array([[TEMP_DATA['temp'], HUMI_DATA['humi']]])
-        predicted_pmv = model_comfort.predict(input_comf)[0]
-        
-        if predicted_pmv > 0.5:
-            publish(TOPIC_FAN, "1")
-        else:
-            publish(TOPIC_FAN, "0")
+        # AI 2: Bật/Tắt QUẠT dựa trên mô hình ASHRAE Thermal Comfort
+        if model_comfort and topic in [TOPIC_TEMP, TOPIC_HUMI]:
+            input_comf = pd.DataFrame(
+                [[TEMP_DATA['temp'], HUMI_DATA['humi']]],
+                columns=['Air temperature (C)', 'Relative humidity (%)']
+            )
+            predicted_pmv = model_comfort.predict(input_comf)[0]
+            
+            if predicted_pmv > 0.5:
+                publish(TOPIC_FAN, "1")
+            else:
+                publish(TOPIC_FAN, "0")
 
 client.on_connect = on_connect
 client.on_message = on_message

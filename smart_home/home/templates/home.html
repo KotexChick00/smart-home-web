@@ -49,6 +49,14 @@
     </div>
 </div>
 
+<!-- AI AUTOMATION -->
+<div class="card" style="background-color: #fafafa; border: 1.5px solid #eaeaea;">
+    <h2>🤖 AI Automation (pkl)</h2>
+    <button onclick="setAiMode('ON')" style="background-color: #2e7d32; color: white; border: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; margin-right: 8px; cursor: pointer;">Bật AI</button>
+    <button onclick="setAiMode('OFF')" style="background-color: #c62828; color: white; border: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; cursor: pointer;">Tắt AI</button>
+    <div id="ai-status" class="status" style="color: #2e7d32; font-size: 16px; margin-top: 12px;">Chế độ AI: BẬT (Tự động)</div>
+</div>
+
 <!-- LED -->
 <div class="card">
     <h2>💡 LED</h2>
@@ -91,12 +99,19 @@
 </div>
 
 <!-- CAMERA FEED -->
-<div class="card" style="width: 400px;">
+<div class="card" style="width: 400px; border: 1.5px solid #eaeaea;">
     <h2>📷 Camera Face Detection</h2>
-    <img src="/video_feed/" width="100%" style="border-radius: 8px; border: 1px solid #ccc;" alt="Camera Stream Loading...">
-    <div class="status" style="font-weight: normal; font-size: 14px; margin-top: 10px; color: #555;">
-        Nhận diện thông qua UniFace AI (RetinaFace)
+    <div style="position: relative; width: 100%; height: 225px; background-color: #000; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+        <img id="camera-feed" src="" width="100%" height="100%" style="display: none; object-fit: cover;" alt="Camera Stream">
+        <div id="camera-placeholder" style="color: #888; font-weight: bold; text-align: center; font-size: 15px;">
+            🎥 Camera đang tắt.<br><span style="font-weight: normal; font-size: 13px; color: #666;">Nhấn nút dưới đây để bật nhận diện.</span>
+        </div>
     </div>
+    <div style="margin-top: 15px; display: flex; gap: 10px; align-items: center;">
+        <button id="cam-on-btn" onclick="setCameraMode('ON')" style="background-color: #2e7d32; color: white; border: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; cursor: pointer;">Bật Camera</button>
+        <button id="cam-off-btn" onclick="setCameraMode('OFF')" style="background-color: #c62828; color: white; border: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; cursor: pointer;">Tắt Camera</button>
+    </div>
+    <div id="cam-status" class="status" style="color: #c62828; font-size: 15px; margin-top: 12px;">Camera: Đang tắt</div>
 </div>
 
 <script>
@@ -106,6 +121,7 @@ const LIGHT_URL = "/get_light_data/";
 const TEMP_URL = "/get_temp_data/";
 const HUMI_URL = "/get_humi_data/";
 const IR_URL = "/get_ir_data/";
+const TOGGLE_AI_URL = "/toggle_ai/";
 
 /* ---------------- Device Control ---------------- */
 
@@ -144,8 +160,11 @@ async function updateSensors() {
         const irRes = await fetch(IR_URL);
         const irData = await irRes.json();
 
+        const statusRes = await fetch("/get_device_status/");
+        const statusData = await statusRes.json();
+
         document.getElementById("light-data").innerText =
-            lightData.value ?? "N/A";
+            lightData.light ?? "N/A";
 
         document.getElementById("temp-data").innerText =
             tempData.temp ?? "N/A";
@@ -154,16 +173,99 @@ async function updateSensors() {
             humiData.humi ?? "N/A";
 
         document.getElementById("ir-data").innerText =
-            irData.code ?? "N/A";
+            irData.ir ?? "N/A";
+
+        document.getElementById("led-status").innerText =
+            statusData.led === "1" ? "Status: ON" : "Status: OFF";
+
+        document.getElementById("fan-status").innerText =
+            statusData.fan === "1" ? "Status: ON" : "Status: OFF";
+
+        updateAiStatusUI(statusData.ai_mode);
+        updateCameraUI(statusData.camera_running);
 
     } catch (err) {
         console.error("Sensor update failed", err);
     }
 }
 
-/* ---------------- Auto Refresh ---------------- */
+/* ---------------- AI Mode Control ---------------- */
 
-setInterval(updateSensors, 2000);
+async function setAiMode(state) {
+    try {
+        const res = await fetch(TOGGLE_AI_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ state })
+        });
+        const data = await res.json();
+        updateAiStatusUI(data.ai_mode);
+    } catch (err) {
+        console.error("Failed to set AI mode", err);
+    }
+}
+
+function updateAiStatusUI(aiMode) {
+    const statusEl = document.getElementById("ai-status");
+    if (aiMode) {
+        statusEl.innerText = "Chế độ AI: BẬT (Tự động)";
+        statusEl.style.color = "#2e7d32";
+    } else {
+        statusEl.innerText = "Chế độ AI: TẮT (Thủ công)";
+        statusEl.style.color = "#c62828";
+    }
+}
+
+/* ---------------- Camera Control ---------------- */
+
+async function setCameraMode(state) {
+    try {
+        const res = await fetch("/toggle_camera/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ state })
+        });
+        const data = await res.json();
+        updateCameraUI(data.camera_running);
+    } catch (err) {
+        console.error("Failed to set camera mode", err);
+    }
+}
+
+function updateCameraUI(running) {
+    const img = document.getElementById("camera-feed");
+    const placeholder = document.getElementById("camera-placeholder");
+    const statusText = document.getElementById("cam-status");
+    
+    if (running) {
+        if (!img.src || img.style.display === "none") {
+            img.src = "/video_feed/?t=" + new Date().getTime();
+            img.style.display = "block";
+            placeholder.style.display = "none";
+        }
+        statusText.innerText = "Camera: Đang hoạt động";
+        statusText.style.color = "#2e7d32";
+    } else {
+        if (img.style.display === "block") {
+            img.src = "";
+            img.style.display = "none";
+            placeholder.style.display = "block";
+        }
+        statusText.innerText = "Camera: Đang tắt";
+        statusText.style.color = "#c62828";
+    }
+}
+
+/* ---------------- Auto Refresh & Initialization ---------------- */
+
+// Tự động tắt camera khi đăng nhập thành công vào Dashboard để bảo vệ quyền riêng tư & tiết kiệm CPU
+setCameraMode('OFF');
+
+setInterval(updateSensors, 500);
 updateSensors();
 
 </script>
