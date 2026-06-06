@@ -12,15 +12,30 @@ from .mqtt_client import TOPIC_LED, TOPIC_FAN
 def login_view(request):
     if request.session.get('authenticated'):
         return redirect('home')
+    # Tắt thiết bị khi chưa đăng nhập
+    mqtt_client.IS_LOGGED_IN = False
+    mqtt_client.publish(mqtt_client.TOPIC_LED, '0')
+    mqtt_client.publish(mqtt_client.TOPIC_FAN, '0')
+    mqtt_client.DEVICE_STATE['led'] = '0'
+    mqtt_client.DEVICE_STATE['fan'] = '0'
     return render(request, 'login.html')
 
 def home(request):
     if not request.session.get('authenticated'):
         return redirect('login')
+    # Đánh dấu người dùng đã đăng nhập và đang hoạt động
+    mqtt_client.IS_LOGGED_IN = True
+    mqtt_client.LAST_ACTIVE_TIME = time.time()
     return render(request, 'home.html')
 
 def logout_view(request):
     request.session.flush()
+    # Tắt thiết bị khi đăng xuất
+    mqtt_client.IS_LOGGED_IN = False
+    mqtt_client.publish(mqtt_client.TOPIC_LED, '0')
+    mqtt_client.publish(mqtt_client.TOPIC_FAN, '0')
+    mqtt_client.DEVICE_STATE['led'] = '0'
+    mqtt_client.DEVICE_STATE['fan'] = '0'
     return redirect('login')
 
 def register_view(request):
@@ -29,8 +44,8 @@ def register_view(request):
 def manage_users_view(request):
     # Trang quản lý danh sách user
     from . import camera
-    users = camera.streamer.db.users
-    return render(request, 'manage_users.html', {'users': enumerate(users)})
+    users = camera.label_dict.items()
+    return render(request, 'manage_users.html', {'users': users})
 
 @csrf_exempt
 def delete_user(request):
@@ -39,7 +54,7 @@ def delete_user(request):
         index = data.get('index')
         if index is not None:
             from . import camera
-            success = camera.streamer.db.delete_user(int(index))
+            success = camera.delete_user(int(index))
             if success:
                 return JsonResponse({'status': 'success'})
     return JsonResponse({'status': 'error'})
@@ -136,11 +151,14 @@ def control_device(request, topic, name):
     if request.method != 'POST':
         return JsonResponse({'error': 'Invalid request method'}, status=405)
     state = json.loads(request.body or '{}').get('state')
+    key = name.lower()
     if state == 'ON':
         mqtt_client.publish(topic, '1')
+        mqtt_client.DEVICE_STATE[key] = '1'
         return JsonResponse({'status': f'{name} turned ON'})
     elif state == 'OFF':
         mqtt_client.publish(topic, '0')
+        mqtt_client.DEVICE_STATE[key] = '0'
         return JsonResponse({'status': f'{name} turned OFF'})
     return JsonResponse({'error': 'Invalid state'}, status=400)
 
@@ -164,6 +182,12 @@ import json
 
 def get_device_status(request):
     """API trả về trạng thái hiện tại của Đèn, Quạt và Chế độ AI cho giao diện Web"""
+    if request.session.get('authenticated'):
+        mqtt_client.IS_LOGGED_IN = True
+        mqtt_client.LAST_ACTIVE_TIME = time.time()
+    else:
+        mqtt_client.IS_LOGGED_IN = False
+
     from . import camera
     return JsonResponse({
         'led': mqtt_client.DEVICE_STATE.get('led', '0'),

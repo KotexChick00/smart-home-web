@@ -84,16 +84,20 @@ class CameraStreamer:
                 
                 roi_gray = gray[y:y+h, x:x+w]
                 label = "Unknown"
-                color = (0, 0, 255)
+                color = (0, 0, 255) # Màu đỏ cho Unknown
                 
                 # 2. Giao diện trang Đăng nhập (Nhận diện)
                 if len(label_dict) > 0:
                     id_, conf = recognizer.predict(roi_gray)
                     # LBPH: Khoảng cách (Confidence) càng nhỏ càng giống. Ngưỡng tốt thường < 75.
-                    if conf < 75:
-                        label = f"{label_dict.get(id_, 'Unknown')} ({int(conf)})"
-                        color = (0, 255, 0) # Xanh lá nếu nhận ra
-                        best_user = label_dict.get(id_)
+                    user_name = label_dict.get(id_)
+                    if conf < 75 and user_name:
+                        label = f"{user_name} ({int(conf)})"
+                        color = (0, 255, 0) # Xanh lá nếu nhận diện đúng người trong db
+                        best_user = user_name
+                    else:
+                        label = f"Unknown ({int(conf)})" if conf < 75 else "Unknown"
+                        color = (0, 0, 255) # Màu đỏ nếu không khớp hoặc không tìm thấy trong db
                 
                 cv2.rectangle(display_frame, (x, y), (x+w, y+h), color, 2)
                 cv2.putText(display_frame, label, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
@@ -172,3 +176,17 @@ def register_new_user(name):
         pickle.dump(label_dict, f)
         
     return True, f"Đã đăng ký thành công ID Face: {name}"
+
+def delete_user(user_id):
+    """Xóa người dùng khỏi danh sách được phép truy cập (label_dict)"""
+    global label_dict
+    if user_id in label_dict:
+        label_dict.pop(user_id)
+        try:
+            with open(LABEL_PATH, 'wb') as f:
+                pickle.dump(label_dict, f)
+            return True
+        except Exception as e:
+            print("Lỗi khi ghi lại labels.pkl:", e)
+            return False
+    return False

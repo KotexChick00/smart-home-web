@@ -264,6 +264,8 @@
 
         // Check for face detection every 1.5 seconds
         let detectedUser = null;
+        let loginResetTimeout = null;
+
         setInterval(async () => {
             if (detectedUser) return; // Nếu đã hiện nút đăng nhập thì không check nữa
 
@@ -276,6 +278,18 @@
                     document.getElementById('face-status').style.color = "#4caf50";
                     document.getElementById('detected-user').innerText = detectedUser;
                     document.getElementById('login-confirm-box').style.display = "block";
+
+                    // Nhận diện thành công mà chưa đăng nhập sau 10 giây tự động thực hiện lại nhận diện
+                    clearTimeout(loginResetTimeout);
+                    loginResetTimeout = setTimeout(() => {
+                        detectedUser = null;
+                        document.getElementById('face-status').innerHTML = `
+                            <div class="pulse"></div>
+                            Đang chờ phát hiện khuôn mặt...
+                        `;
+                        document.getElementById('face-status').style.color = "#aaa";
+                        document.getElementById('login-confirm-box').style.display = "none";
+                    }, 10000);
                 }
             } catch (err) {
                 console.error("Error checking face:", err);
